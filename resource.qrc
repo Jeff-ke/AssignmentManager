@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Logo.png</file>
+        <file>../../Downloads/assignment-manager-logo.ico</file>
+    </qresource>
+</RCC>

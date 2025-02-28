@@ -1,0 +1,29 @@
+# This file is used to ignore files which are generated
+# ----------------------------------------------------------------------------
+
+# Build directories
+build*/
+cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+
+# Autogen files
+*_autogen/
+*.qrc
+*.moc
+*.qmake.stash
+
+# Qt Creator user files
+*.pro.user
+*.qmake.stash
+
+# Windows system files
+Thumbs.db
+desktop.ini
+
+# IDE Settings
+.idea/
+*.user
+*.cache
