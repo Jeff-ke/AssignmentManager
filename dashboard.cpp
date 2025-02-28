@@ -278,8 +278,10 @@ void Dashboard::refreshAccessToken()
         return;
     }
 
-    QString clientId = "ENV_CLIENT_ID";
-    QString clientSecret = "ENV_CLIENT_SECRET";
+    const QString clientId = qgetenv("GOOGLE_CLIENT_ID");
+    const QString clientSecret = qgetenv("GOOGLE_CLIENT_SECRET");
+
+
     QString tokenUrl = "https://oauth2.googleapis.com/token";
 
     QNetworkAccessManager *manager = new QNetworkAccessManager(this);
