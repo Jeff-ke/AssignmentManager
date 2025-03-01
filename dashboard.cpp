@@ -167,7 +167,7 @@ void Dashboard::startOAuthProcess()
                               "&prompt=consent"
                               "&redirect_uri=http://localhost:8080"
                               "&client_id=%1")
-                          .arg("ENV_CLIENT_ID");
+                          .arg("GOOGLE_CLIENT_ID");
     qDebug() << "Generated Authorization URL: " << authUrl;
     QDesktopServices::openUrl(QUrl(authUrl));
 }
@@ -319,8 +319,8 @@ void Dashboard::refreshAccessToken()
 
 void Dashboard::requestAccessToken(const QString &authCode, const QString &folderId)
 {
-    QString clientId = "ENV_CLIENT_ID";
-    QString clientSecret = "ENV_CLIENT_SECRET";
+    QString clientId = "GOOGLE_CLIENT_ID";
+    QString clientSecret = "GOOGLE_CLIENT_SECRET";
     QString redirectUri = "http://localhost:8080";
     QString tokenUrl = "https://oauth2.googleapis.com/token";
 
