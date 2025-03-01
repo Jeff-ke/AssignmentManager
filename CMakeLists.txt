@@ -25,11 +25,20 @@ include_directories(${Poppler_INCLUDE_DIR})
 link_directories("C:/msys64/mingw64/lib")
 
 # Source files
+# set(PROJECT_SOURCES
+#     main.cpp
+#     Dashboard.cpp
+#     Dashboard.h
+#     Dashboard.ui
+#     resource.qrc
+# )
 set(PROJECT_SOURCES
     main.cpp
     Dashboard.cpp
     Dashboard.h
     Dashboard.ui
+    GoogleAuthManager.cpp
+    GoogleAuthManager.h
     resource.qrc
 )
 
@@ -38,6 +47,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(AssignmentManager
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
+        googleauthmanager.h googleauthmanager.cpp
+        googledriveservice.h googledriveservice.cpp
     )
 else()
     add_executable(AssignmentManager ${PROJECT_SOURCES})

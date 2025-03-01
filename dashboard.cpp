@@ -122,40 +122,6 @@ Dashboard::~Dashboard()
     }
 }
 // extra code just for debuggin - purpos
-void Dashboard::verifyState() {
-    qDebug() << "\n=== CURRENT STATE ===";
-    qDebug() << "showingHighSimilarityOnly:" << showingHighSimilarityOnly;
-    qDebug() << "originalAssignments size:" << originalAssignments.size();
-    qDebug() << "Current table rows:" << ui->assignments_tableWidget->rowCount();
-    qDebug() << "Button text:" << ui->deletedAssignments_pushButton->text();
-}
-
-void Dashboard::setAppLogo()
-{
-    QPixmap logo("://Logo.png");
-    if (!logo.isNull()) {
-        logo = logo.scaled(75, 75, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        ui->App_logo->setPixmap(logo);
-        //ui->App_logo->setScaledContents(true);
-    } else {
-        qWarning() << "Failed to load the logo image!";
-    }
-}
-
-void Dashboard::updateDateLabel()
-{
-    QDate currentDate = QDate::currentDate();
-    QString formattedDate = currentDate.toString("MMM d, yyyy");
-    ui->date_label->setText(formattedDate);
-}
-
-void Dashboard::startDateTimer()
-{
-    QTimer *timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &Dashboard::updateDateLabel);
-    timer->start(60000);
-}
-
 void Dashboard::startOAuthProcess()
 {
     qDebug() << "startOAuthProcess called from:" << QObject::sender();
@@ -172,103 +138,27 @@ void Dashboard::startOAuthProcess()
     QDesktopServices::openUrl(QUrl(authUrl));
 }
 
-void Dashboard::onReadyRead()
+void Dashboard::requestAccessToken(const QString &authCode, const QString &folderId)
 {
-    QTcpSocket *socket = server->nextPendingConnection();
-    connect(socket, &QTcpSocket::readyRead, this, [socket, this]() {
-        QByteArray request = socket->readAll();
-        qDebug() << "Full HTTP Request: " << request;
+    QString clientId = "GOOGLE_CLIENT_ID";
+    QString clientSecret = "GOOGLE_CLIENT_SECRET";
+    QString redirectUri = "http://localhost:8080";
+    QString tokenUrl = "https://oauth2.googleapis.com/token";
 
-        QString requestString = QString::fromUtf8(request);
+    QNetworkAccessManager *manager = new QNetworkAccessManager(this);
+    QUrl url(tokenUrl);
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
-        static const QRegularExpression regExp("GET\\s(\\/.*)\\sHTTP");
-        QRegularExpressionMatch match = regExp.match(requestString);
+    QByteArray postData;
+    postData.append("code=" + authCode.toUtf8() + "&");
+    postData.append("client_id=" + clientId.toUtf8() + "&");
+    postData.append("client_secret=" + clientSecret.toUtf8() + "&");
+    postData.append("redirect_uri=" + redirectUri.toUtf8() + "&");
+    postData.append("grant_type=authorization_code");
 
-        if (match.hasMatch()) {
-            QString queryString = match.captured(1);
-            QUrl url("http://localhost" + queryString);
-            QUrlQuery query(url);
-
-            if (query.hasQueryItem("code")) {
-                QString authCode = query.queryItemValue("code");
-                qDebug() << "Extracted Authorization Code: " << authCode;
-
-                QByteArray response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
-                                      "<html><body><h1>Authentication Successful!</h1><h3>Youu may close this window and proceed to the desktop application to view your files in your selected drive and Analyze the files therein.</h3></body></html>";
-                socket->write(response);
-                socket->disconnectFromHost();
-
-                // Call with default empty folder ID
-                requestAccessToken(authCode, QString());
-            } else {
-                QByteArray response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n"
-                                      "<html><body><h1>Authorization failed.</h1><h3>Try again.</h3></body></html>";
-                socket->write(response);
-                socket->disconnectFromHost();
-            }
-        }
-    });
-}
-
-void Dashboard::onAccessTokenReceived()
-{
-    QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-    if (reply->error() == QNetworkReply::NoError)
-    {
-        QByteArray response = reply->readAll();
-        QJsonDocument jsonResponse = QJsonDocument::fromJson(response);
-        QJsonObject jsonObject = jsonResponse.object();
-
-        accessToken = jsonObject["access_token"].toString();
-        refreshToken = jsonObject["refresh_token"].toString();
-        int expiresIn = jsonObject["expires_in"].toInt();
-
-        tokenExpiryTime = QDateTime::currentDateTime().addSecs(expiresIn);
-
-        // Update login state first
-        isLoggedIn = true;
-
-        // Update UI on the main thread
-        QMetaObject::invokeMethod(this, [this]() {
-            ui->login_pushButton->setText("Logout");
-            ui->login_pushButton->setEnabled(true);
-        }, Qt::QueuedConnection);
-
-        qDebug() << "Access Token: " << accessToken;
-        qDebug() << "Token Expires At: " << tokenExpiryTime.toString();
-        qDebug() << "Login successful. Button updated to 'Logout'.";
-
-        scheduleTokenRefresh(expiresIn - 120);
-        fetchDriveFolders();
-        fetchUserProfile();
-    }
-    else
-    {
-        qWarning() << "Error fetching access token: " << reply->errorString();
-        // Update UI to show error state
-        QMetaObject::invokeMethod(this, [this]() {
-            ui->login_pushButton->setEnabled(true);
-            ui->login_pushButton->setText("Login");
-            isLoggedIn = false;
-        }, Qt::QueuedConnection);
-    }
-    reply->deleteLater();
-}
-
-void Dashboard::scheduleTokenRefresh(int secondsUntilRefresh)
-{
-    if (tokenRefreshTimer)
-    {
-        tokenRefreshTimer->stop();
-    }
-    else
-    {
-        tokenRefreshTimer = new QTimer(this);
-        connect(tokenRefreshTimer, &QTimer::timeout, this, &Dashboard::refreshAccessToken);
-    }
-
-    tokenRefreshTimer->start(secondsUntilRefresh * 1000);
-    qDebug() << "Token refresh scheduled in " << secondsUntilRefresh << " seconds.";
+    QNetworkReply *reply = manager->post(request, postData);
+    connect(reply, &QNetworkReply::finished, this, &Dashboard::onAccessTokenReceived);
 }
 
 void Dashboard::refreshAccessToken()
@@ -317,27 +207,185 @@ void Dashboard::refreshAccessToken()
     });
 }
 
-void Dashboard::requestAccessToken(const QString &authCode, const QString &folderId)
+void Dashboard::scheduleTokenRefresh(int secondsUntilRefresh)
 {
-    QString clientId = "GOOGLE_CLIENT_ID";
-    QString clientSecret = "GOOGLE_CLIENT_SECRET";
-    QString redirectUri = "http://localhost:8080";
-    QString tokenUrl = "https://oauth2.googleapis.com/token";
+    if (tokenRefreshTimer)
+    {
+        tokenRefreshTimer->stop();
+    }
+    else
+    {
+        tokenRefreshTimer = new QTimer(this);
+        connect(tokenRefreshTimer, &QTimer::timeout, this, &Dashboard::refreshAccessToken);
+    }
 
-    QNetworkAccessManager *manager = new QNetworkAccessManager(this);
-    QUrl url(tokenUrl);
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    tokenRefreshTimer->start(secondsUntilRefresh * 1000);
+    qDebug() << "Token refresh scheduled in " << secondsUntilRefresh << " seconds.";
+}
 
-    QByteArray postData;
-    postData.append("code=" + authCode.toUtf8() + "&");
-    postData.append("client_id=" + clientId.toUtf8() + "&");
-    postData.append("client_secret=" + clientSecret.toUtf8() + "&");
-    postData.append("redirect_uri=" + redirectUri.toUtf8() + "&");
-    postData.append("grant_type=authorization_code");
+void Dashboard::onAccessTokenReceived()
+{
+    QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        QByteArray response = reply->readAll();
+        QJsonDocument jsonResponse = QJsonDocument::fromJson(response);
+        QJsonObject jsonObject = jsonResponse.object();
 
-    QNetworkReply *reply = manager->post(request, postData);
-    connect(reply, &QNetworkReply::finished, this, &Dashboard::onAccessTokenReceived);
+        accessToken = jsonObject["access_token"].toString();
+        refreshToken = jsonObject["refresh_token"].toString();
+        int expiresIn = jsonObject["expires_in"].toInt();
+
+        tokenExpiryTime = QDateTime::currentDateTime().addSecs(expiresIn);
+
+        // Update login state first
+        isLoggedIn = true;
+
+        // Update UI on the main thread
+        QMetaObject::invokeMethod(this, [this]() {
+            ui->login_pushButton->setText("Logout");
+            ui->login_pushButton->setEnabled(true);
+        }, Qt::QueuedConnection);
+
+        qDebug() << "Access Token: " << accessToken;
+        qDebug() << "Token Expires At: " << tokenExpiryTime.toString();
+        qDebug() << "Login successful. Button updated to 'Logout'.";
+
+        scheduleTokenRefresh(expiresIn - 120);
+        fetchDriveFolders();
+        fetchUserProfile();
+    }
+    else
+    {
+        qWarning() << "Error fetching access token: " << reply->errorString();
+        // Update UI to show error state
+        QMetaObject::invokeMethod(this, [this]() {
+            ui->login_pushButton->setEnabled(true);
+            ui->login_pushButton->setText("Login");
+            isLoggedIn = false;
+        }, Qt::QueuedConnection);
+    }
+    reply->deleteLater();
+}
+
+void Dashboard::onReadyRead()
+{
+    QTcpSocket *socket = server->nextPendingConnection();
+    connect(socket, &QTcpSocket::readyRead, this, [socket, this]() {
+        QByteArray request = socket->readAll();
+        qDebug() << "Full HTTP Request: " << request;
+
+        QString requestString = QString::fromUtf8(request);
+
+        static const QRegularExpression regExp("GET\\s(\\/.*)\\sHTTP");
+        QRegularExpressionMatch match = regExp.match(requestString);
+
+        if (match.hasMatch()) {
+            QString queryString = match.captured(1);
+            QUrl url("http://localhost" + queryString);
+            QUrlQuery query(url);
+
+            if (query.hasQueryItem("code")) {
+                QString authCode = query.queryItemValue("code");
+                qDebug() << "Extracted Authorization Code: " << authCode;
+
+                QByteArray response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+                                      "<html><body><h1>Authentication Successful!</h1><h3>Youu may close this window and proceed to the desktop application to view your files in your selected drive and Analyze the files therein.</h3></body></html>";
+                socket->write(response);
+                socket->disconnectFromHost();
+
+                // Call with default empty folder ID
+                requestAccessToken(authCode, QString());
+            } else {
+                QByteArray response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n"
+                                      "<html><body><h1>Authorization failed.</h1><h3>Try again.</h3></body></html>";
+                socket->write(response);
+                socket->disconnectFromHost();
+            }
+        }
+    });
+}
+
+void Dashboard::logout()
+{
+    // Clear session variables
+    accessToken.clear();
+    refreshToken.clear();
+    downloadedFiles.clear();
+    updatePlagiarismButtonState();
+
+
+    resetClassAverage();
+    showingHighSimilarityOnly = false;
+    originalAssignments.clear();
+
+
+
+    if (tokenRefreshTimer) {
+        tokenRefreshTimer->stop();
+    }
+
+    // Reset login state
+    isLoggedIn = false;
+
+    // Update UI elements
+    ui->login_pushButton->setText("Login");
+    ui->login_pushButton->setEnabled(true);
+    ui->rejected_assignments_label->setText("Flagged Files: 0");
+
+    ui->class_average_label->setText("0.00%");
+    ui->class_average_label->setStyleSheet("color: white; font-weight: bold;");
+
+    // Clear other UI elements
+    ui->folderComboBox->clear();
+    ui->folderComboBox->addItem("Select a folder", "");
+    ui->assignments_tableWidget->setRowCount(0);
+    ui->total_submitted_assignments_label->setText("Total Files: 0");
+    ui->logged_in_as_Label->setText("Not logged in");
+    qDebug() << "User logged out. Button updated to 'Login'.";
+
+    if (ui->assignments_tableWidget->columnCount() >= 5) {
+        for (int row = 0; row < ui->assignments_tableWidget->rowCount(); ++row) {
+            if (ui->assignments_tableWidget->item(row, 4)) {
+                ui->assignments_tableWidget->item(row, 4)->setText("0.00%");
+                ui->assignments_tableWidget->item(row, 4)->setBackground(Qt::white);
+            }
+        }
+    }
+}
+
+void Dashboard::verifyState() {
+    qDebug() << "\n=== CURRENT STATE ===";
+    qDebug() << "showingHighSimilarityOnly:" << showingHighSimilarityOnly;
+    qDebug() << "originalAssignments size:" << originalAssignments.size();
+    qDebug() << "Current table rows:" << ui->assignments_tableWidget->rowCount();
+    qDebug() << "Button text:" << ui->deletedAssignments_pushButton->text();
+}
+
+void Dashboard::setAppLogo()
+{
+    QPixmap logo("://Logo.png");
+    if (!logo.isNull()) {
+        logo = logo.scaled(75, 75, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        ui->App_logo->setPixmap(logo);
+        //ui->App_logo->setScaledContents(true);
+    } else {
+        qWarning() << "Failed to load the logo image!";
+    }
+}
+
+void Dashboard::updateDateLabel()
+{
+    QDate currentDate = QDate::currentDate();
+    QString formattedDate = currentDate.toString("MMM d, yyyy");
+    ui->date_label->setText(formattedDate);
+}
+
+void Dashboard::startDateTimer()
+{
+    QTimer *timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &Dashboard::updateDateLabel);
+    timer->start(60000);
 }
 
 void Dashboard::fetchDriveFolders()
@@ -1519,53 +1567,6 @@ void Dashboard::exportSimilarityMatrix() {
     file.close();
 }
 
-void Dashboard::logout()
-{
-    // Clear session variables
-    accessToken.clear();
-    refreshToken.clear();
-    downloadedFiles.clear();
-    updatePlagiarismButtonState();
-
-
-    resetClassAverage();
-    showingHighSimilarityOnly = false;
-    originalAssignments.clear();
-
-
-
-    if (tokenRefreshTimer) {
-        tokenRefreshTimer->stop();
-    }
-
-    // Reset login state
-    isLoggedIn = false;
-
-    // Update UI elements
-    ui->login_pushButton->setText("Login");
-    ui->login_pushButton->setEnabled(true);
-    ui->rejected_assignments_label->setText("Flagged Files: 0");
-
-    ui->class_average_label->setText("0.00%");
-    ui->class_average_label->setStyleSheet("color: white; font-weight: bold;");
-
-    // Clear other UI elements
-    ui->folderComboBox->clear();
-    ui->folderComboBox->addItem("Select a folder", "");
-    ui->assignments_tableWidget->setRowCount(0);
-    ui->total_submitted_assignments_label->setText("Total Files: 0");
-    ui->logged_in_as_Label->setText("Not logged in");
-    qDebug() << "User logged out. Button updated to 'Login'.";
-
-    if (ui->assignments_tableWidget->columnCount() >= 5) {
-        for (int row = 0; row < ui->assignments_tableWidget->rowCount(); ++row) {
-            if (ui->assignments_tableWidget->item(row, 4)) {
-                ui->assignments_tableWidget->item(row, 4)->setText("0.00%");
-                ui->assignments_tableWidget->item(row, 4)->setBackground(Qt::white);
-            }
-        }
-    }
-}
 
 
 /* todo
