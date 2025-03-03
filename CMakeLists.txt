@@ -49,6 +49,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ${PROJECT_SOURCES}
         googleauthmanager.h googleauthmanager.cpp
         googledriveservice.h googledriveservice.cpp
+        plagiarismdetector.h plagiarismdetector.cpp
     )
 else()
     add_executable(AssignmentManager ${PROJECT_SOURCES})

@@ -1,6 +1,8 @@
 #ifndef DASHBOARD_H
 #define DASHBOARD_H
 
+#include "GoogleAuthManager.h"
+#include "GoogleDriveService.h"
 #include "ui_Dashboard.h"
 #include <QMainWindow>
 #include <QTcpServer>
@@ -9,25 +11,20 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QDateTime>
-
 #include <QProgressDialog>
-
 #include <QPrinter>
 #include <QPainter>
 #include <QFileDialog>
 #include <QPageSize>
 #include <QtPrintSupport/QPrinter>
 #include <QtPrintSupport/QPrinterInfo>
-
 #include <QToolBar>
 #include <QLineEdit>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QStatusBar>
-
-
-
 #include <poppler/qt6/poppler-qt6.h>
+
 
 class Dashboard : public QMainWindow
 {
@@ -39,90 +36,72 @@ public:
     ~Dashboard();
 
 private slots:
-    void startOAuthProcess();
-    void requestAccessToken(const QString &authCode, const QString &folderId = QString());
-    void refreshAccessToken();
-    void scheduleTokenRefresh(int secondsUntilRefresh);
+
 
     void updateDateLabel();
     void startDateTimer();
     void setAppLogo();
-    void verifyState();
-
-    void on_login_pushButton_clicked();
-    //void on_refresh_pushButton_clicked(QString folderId);
-
-
-    void onAccessTokenReceived();
-    void onReadyRead();
-   // void on_fetchDriveFiles_pushButton_clicked(QString folderId );
     void downloadFile(const QString &fileId, const QString &fileName);
     void onDriveFilesFetched();
     void fetchDriveFiles(const QString &folderId);
     void fetchDriveFolders();
-    void onDriveFoldersFetched();
-    void on_folderComboBox_currentIndexChanged(int index);
-
-    void logout();
-
     double getAverageSimilarity() const;
-
-    void updateSimilarityDisplay(const QMap<QString, double>& highestSimilarities,
-                                 double averageSimilarity);
-    void on_deletedAssignments_pushButton_clicked();
-    void on_refresh_pushButton_clicked();
     void clearDownloadedFiles();
-
     void exportToPDF(QTableWidget* table, const QString& averageText, const QString& summaryText);
     void exportSimilarityMatrix();
     void updateLoginStatus(const QString& email);
     void downloadAllFiles();
     void filterAssignmentsBySearch(const QString& query);
+    void updateSimilarityDisplay(const QMap<QString, double>& highestSimilarities,
+                                 double averageSimilarity);
+
     void onUserProfileFetched();
+    void onLoginStatusChanged(bool isLoggedIn);
+    void onAuthTokenReceived();
+    void onAuthenticationError(const QString &errorMessage);
+    void onUserLoggedOut();
+    void onTokenRefreshed();
+    void on_deletedAssignments_pushButton_clicked();
+    void on_refresh_pushButton_clicked();
+    void on_folderComboBox_currentIndexChanged(int index);
+    void on_login_pushButton_clicked();
+    void onDriveFoldersFetched();
+
+//  void verifyState();
+//  void on_refresh_pushButton_clicked(QString folderId);
+//  void on_fetchDriveFiles_pushButton_clicked(QString folderId );
 
 
 private:
+
     Ui::Dashboard *ui;//UI pointer and other pointers and declarations
-    QTcpServer *server;
-    QTimer *tokenRefreshTimer;
-    QString accessToken;
-    QString refreshToken;
-    QDateTime tokenExpiryTime;
     QString folderId;
     QString selectedFolderId;
-    bool isLoggedIn;
     QProgressDialog* progressDialog = nullptr;
-
-
-
     QToolBar* toolBar;
     QLineEdit* searchBox;
-
+    GoogleAuthManager *authManager;
+    GoogleDriveService *driveService;
     void fetchUserProfile();
+    bool showingHighSimilarityOnly=false;
+    void filterAssignmentsBySimilarity(bool showHighSimilarityOnly);
+    void resetClassAverage();
+    void compareFiles();
+    void showPlagiarismResults(const QVector<QPair<QPair<QString, QString>, double>>& results);
+    void updatePlagiarismButtonState() {
+        if (ui->checkPlagiarism_pushButton) {
+            ui->checkPlagiarism_pushButton->setEnabled(downloadedFiles.size() >= 2);
+        }
+    }
 
+
+    // QVector<QPair<QString, double>> originalAssignments;
     // QPushButton* filterButton;
     // bool showingFilteredResults;
     // void toggleSimilarityFilter();
     // void refreshClassAverage();
     // void restoreFullTable();
     // QVector<int> hiddenRows;  // To store rows that are filtered out
-
-
-
-    bool showingHighSimilarityOnly=false;
-    void filterAssignmentsBySimilarity(bool showHighSimilarityOnly);
-    void resetClassAverage();
-  //  QVector<QPair<QString, double>> originalAssignments;
-
-
-     void compareFiles();
-     void showPlagiarismResults(const QVector<QPair<QPair<QString, QString>, double>>& results);
-
-     void updatePlagiarismButtonState() {
-         if (ui->checkPlagiarism_pushButton) {
-             ui->checkPlagiarism_pushButton->setEnabled(downloadedFiles.size() >= 2);
-         }
-     }
 
     struct FileContent {
         QString id;
